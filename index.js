@@ -1,61 +1,64 @@
-var express = require('express');
-var app = express();
-
-app.set('port', (process.env.PORT || 5000));
-
-app.use(express.static(__dirname + '/public'));
-
-// views is directory for all template files
-app.set('views', __dirname + '/views');
-app.set('view engine', 'ejs');
-
-app.get('/', function(request, response) {
-  response.render('pages/index');
-});
-
-app.listen(app.get('port'), function() {
-  console.log('Node app is running on port', app.get('port'));
-});
-
+/**
+ * Created by APC on 10/13/2016.
+ */
 var firebase = require("firebase");
+var request = require('request');
+var API_KEY = "AIzaSyCKMx6wRJOGRfvGtBswXBvIlzZx0jsxtYI"; 
+
 firebase.initializeApp({
-  serviceAccount: "FriendChat-c9590ad56875.json",
-  databaseURL: "https://friendchat-260ce.firebaseio.com"
+    serviceAccount: "FriendChat-c9590ad56875.json",
+    databaseURL: "https://friendchat-260ce.firebaseio.com"
 });
 
 var db = firebase.database();
-var ref = db.ref("message");
-var ref1 = db.ref("test");
+//var ref = db.ref("calls");
 
-// ref.push({
-//     name:"tuan",
-//     email:"degea9@gmail.com"
-// })
-//
-// ref.push({
-//     name:"truong",
-//     email:"truong@gmail.com"
-// })
+//var ref = firebase.database().ref();
 
 
+function listenForNotificationRequests() {
+  var requests = db.ref("calls");
+  requests.on('child_added', function(requestSnapshot) {
+    var request = requestSnapshot.val();
+    sendNotificationToUser(
+         request.callerId, 
+      request.receiverId, 
+      request.sessionId,
+      function() {
+          console.log("success");
+        requests.child(requestSnapshot.getKey()).remove();
+      }
+    );
+  }, function(error) {
+    console.error(error);
+  });
+};
 
-ref.once("value", function(snapshot) {
-  console.log(snapshot.val());
-});
+function sendNotificationToUser(callerId,receiverId, sessionId, onSuccess) {
+  request({
+    url: 'https://fcm.googleapis.com/fcm/send',
+    method: 'POST',
+    headers: {
+      'Content-Type' :' application/json',
+      'Authorization': 'key='+API_KEY
+    },
+    body: JSON.stringify({
+      data:{
+         callerId: callerId,
+         sessionId: sessionId
+      },
+      to : '/topics/'+receiverId
+    })
+  }, function(error, response, body) {
+    if (error) { console.error(error); }
+    else if (response.statusCode >= 400) { 
+      console.error('HTTP Error: '+response.statusCode+' - '+response.statusMessage); 
+    }
+    else {
+      onSuccess();
+    }
+  });
+}
 
-ref.on("child_changed", function(snapshot) {
-  var message = snapshot.val();
-  console.log("The updated message is " + message.message);
-  ref1.push({
-       name:"child_changed",
-      email:"child_changed@gmail.com"
-   })
-});
-
-ref.on("child_added",function (snapshot) {
-  var message = snapshot.val();
-  console.log("The new message  " + message.message);
-
-})
-
-
+// start listening
+listenForNotificationRequests();
